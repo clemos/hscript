@@ -45,7 +45,15 @@ class Interp {
 		variables.set("null",null);
 		variables.set("true",true);
 		variables.set("false",false);
-		variables.set("trace",function(e) haxe.Log.trace(Std.string(e),cast { fileName : "hscript", lineNumber : 0 }));
+		#if hscriptPos
+		variables.set("_trace_",function(e, f, l) {
+			haxe.Log.trace(Std.string(e),cast { fileName : f, lineNumber : l });
+		});
+		#else
+		variables.set("trace",function(e) {
+			haxe.Log.trace(Std.string(e),cast { fileName : "hscript", lineNumber : 0 });
+		});
+		#end
 		initOps();
 	}
 
@@ -88,7 +96,7 @@ class Interp {
 
 	function assign( e1 : Expr, e2 : Expr ) : Dynamic {
 		var v = expr(e2);
-		switch( e1 ) {
+		switch( #if hscriptPos e1.e #else e1 #end ) {
 		case EIdent(id):
 			var l = locals.get(id);
 			if( l == null )
@@ -96,10 +104,10 @@ class Interp {
 			else
 				l.r = v;
 		case EField(e,f):
-			v = set(expr(e),f,v);
+			v = set(expr(e),f,v,e);
 		case EArray(e,index):
 			expr(e)[expr(index)] = v;
-		default: throw Error.EInvalidOp("=");
+		default: throw Error.InExpr(ErrorDef.EInvalidOp("="), e1);
 		}
 		return v;
 	}
@@ -109,9 +117,9 @@ class Interp {
 		binops.set(op,function(e1,e2) return me.evalAssignOp(op,fop,e1,e2));
 	}
 
-	function evalAssignOp(op,fop,e1,e2) : Dynamic {
+	function evalAssignOp(op,fop,e1:Expr,e2) : Dynamic {
 		var v;
-		switch( e1 ) {
+		switch( #if hscriptPos e1.e #else e1 #end ) {
 		case EIdent(id):
 			var l = locals.get(id);
 			v = fop(expr(e1),expr(e2));
@@ -121,21 +129,21 @@ class Interp {
 				l.r = v;
 		case EField(e,f):
 			var obj = expr(e);
-			v = fop(get(obj,f),expr(e2));
-			v = set(obj,f,v);
+			v = fop(get(obj,f,e),expr(e2));
+			v = set(obj,f,v,e);
 		case EArray(e,index):
 			var arr = expr(e);
 			var index = expr(index);
 			v = fop(arr[index],expr(e2));
 			arr[index] = v;
 		default:
-			throw Error.EInvalidOp(op);
+			throw Error.InExpr(ErrorDef.EInvalidOp(op), e1); //FIXME
 		}
 		return v;
 	}
 
 	function increment( e : Expr, prefix : Bool, delta : Int ) : Dynamic {
-		switch(e) {
+		switch(#if hscriptPos e.e #else e #end) {
 		case EIdent(id):
 			var l = locals.get(id);
 			var v : Dynamic = (l == null) ? variables.get(id) : l.r;
@@ -147,12 +155,12 @@ class Interp {
 			return v;
 		case EField(e,f):
 			var obj = expr(e);
-			var v : Dynamic = get(obj,f);
+			var v : Dynamic = get(obj,f,e);
 			if( prefix ) {
 				v += delta;
-				set(obj,f,v);
+				set(obj,f,v,e);
 			} else
-				set(obj,f,v + delta);
+				set(obj,f,v + delta,e);
 			return v;
 		case EArray(e,index):
 			var arr = expr(e);
@@ -165,7 +173,7 @@ class Interp {
 				arr[index] = v + delta;
 			return v;
 		default:
-			throw Error.EInvalidOp((delta > 0)?"++":"--");
+			throw Error.InExpr(ErrorDef.EInvalidOp((delta > 0)?"++":"--"), e);
 		}
 	}
 
@@ -177,10 +185,10 @@ class Interp {
 	function exprReturn(e) : Dynamic {
 		try {
 			return expr(e);
-		} catch( e : Stop ) {
-			switch( e ) {
-			case SBreak: throw "Invalid break";
-			case SContinue: throw "Invalid continue";
+		} catch( ee : Stop ) {
+			switch( ee ) {
+			case SBreak: throw Error.InExpr(ErrorDef.EInvalidStmt("break"), e);
+			case SContinue: throw Error.InExpr(ErrorDef.EInvalidStmt("continue"), e);
 			case SReturn(v): return v;
 			}
 		}
@@ -202,7 +210,7 @@ class Interp {
 	}
 
 	public function expr( e : Expr ) : Dynamic {
-		switch( e ) {
+		switch( #if hscriptPos e.e #else e #end ) {
 		case EConst(c):
 			switch( c ) {
 			case CInt(v): return v;
@@ -216,7 +224,7 @@ class Interp {
 				return l.r;
 			var v = variables.get(id);
 			if( v == null && !variables.exists(id) )
-				throw Error.EUnknownVariable(id);
+				throw Error.InExpr(ErrorDef.EUnknownVariable(id), e);
 			return v;
 		case EVar(n,_,e):
 			declared.push({ n : n, old : locals.get(n) });
@@ -232,10 +240,10 @@ class Interp {
 			restore(old);
 			return v;
 		case EField(e,f):
-			return get(expr(e),f);
+			return get(expr(e),f,e);
 		case EBinop(op,e1,e2):
 			var fop = binops.get(op);
-			if( fop == null ) throw Error.EInvalidOp(op);
+			if( fop == null ) throw Error.InExpr(ErrorDef.EInvalidOp(op), e);
 			return fop(e1,e2);
 		case EUnop(op,prefix,e):
 			switch(op) {
@@ -254,19 +262,19 @@ class Interp {
 				return ~expr(e);
 				#end
 			default:
-				throw Error.EInvalidOp(op);
+				throw Error.InExpr(ErrorDef.EInvalidOp(op), e);
 			}
 		case ECall(e,params):
 			var args = new Array();
 			for( p in params )
 				args.push(expr(p));
-			switch(e) {
+			switch(#if hscriptPos e.e #else e #end) {
 			case EField(e,f):
 				var obj = expr(e);
-				if( obj == null ) throw Error.EInvalidAccess(f);
-				return call(obj,Reflect.field(obj,f),args);
+				if( obj == null ) throw Error.InExpr(ErrorDef.EInvalidAccess(f), e);
+				return call(obj,Reflect.field(obj,f),args,e);
 			default:
-				return call(null,expr(e),args);
+				return call(null,expr(e),args,e);
 			}
 		case EIf(econd,e1,e2):
 			return if( expr(econd) == true ) expr(e1) else if( e2 == null ) null else expr(e2);
@@ -286,7 +294,7 @@ class Interp {
 			var capturedLocals = duplicate(locals);
 			var me = this;
 			var f = function(args:Array<Dynamic>) {
-				if( args.length != params.length ) throw "Invalid number of parameters";
+				if( args.length != params.length ) throw Error.InExpr(ErrorDef.EUnmatchedParameters(params.length, args.length), e);
 				var old = me.locals;
 				me.locals = me.duplicate(capturedLocals);
 				for( i in 0...params.length )
@@ -344,7 +352,7 @@ class Interp {
 		case EObject(fl):
 			var o = {};
 			for( f in fl )
-				set(o,f.name,expr(f.e));
+				set(o,f.name,expr(f.e),e);
 			return o;
 		case ETernary(econd,e1,e2):
 			return if( expr(econd) == true ) expr(e1) else expr(e2);
@@ -374,7 +382,7 @@ class Interp {
 		#else
 		try v = v.iterator() catch( e : Dynamic ) {};
 		#end
-		if( v.hasNext == null || v.next == null ) throw Error.EInvalidIterator(v);
+		if( v.hasNext == null || v.next == null ) throw Error.InExpr(ErrorDef.EInvalidIterator(v), null);
 		return v;
 	}
 
@@ -397,18 +405,18 @@ class Interp {
 		restore(old);
 	}
 
-	function get( o : Dynamic, f : String ) : Dynamic {
-		if( o == null ) throw Error.EInvalidAccess(f);
+	function get( o : Dynamic, f : String , ?e : Expr = null ) : Dynamic {
+		if( o == null ) throw Error.InExpr(ErrorDef.EInvalidAccess(f), e);
 		return Reflect.field(o,f);
 	}
 
-	function set( o : Dynamic, f : String, v : Dynamic ) : Dynamic {
-		if( o == null ) throw Error.EInvalidAccess(f);
+	function set( o : Dynamic, f : String, v : Dynamic , ?e : Expr = null ) : Dynamic {
+		if( o == null ) throw Error.InExpr(ErrorDef.EInvalidAccess(f), e);
 		Reflect.setField(o,f,v);
 		return v;
 	}
 
-	function call( o : Dynamic, f : Dynamic, args : Array<Dynamic> ) : Dynamic {
+	function call( o : Dynamic, f : Dynamic, args : Array<Dynamic> , ?e : Expr = null ) : Dynamic {
 		return Reflect.callMethod(o,f,args);
 	}
 

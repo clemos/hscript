@@ -34,6 +34,7 @@ enum Const {
 #if hscriptPos
 typedef Expr = {
 	var e : ExprDef;
+	var file : String;
 	var pmin : Int;
 	var pmax : Int;
 }
@@ -73,21 +74,33 @@ enum CType {
 	CTParent( t : CType );
 }
 
-#if hscriptPos
 class Error {
 	public var e : ErrorDef;
+	#if hscriptPos
+	public var file : String;
 	public var pmin : Int;
 	public var pmax : Int;
-	public function new(e, pmin, pmax) {
+	#end
+	public function new(e) {
 		this.e = e;
-		this.pmin = pmin;
-		this.pmax = pmax;
+	}
+	public function toString() {
+		return Std.string(e) #if hscriptPos + " in " + file + " at char " + pmin + " to " + pmax #end;
+	}
+	static public inline function InExpr(ed:ErrorDef, ?expr:Expr) {
+		var e = new Error(ed);
+		#if hscriptPos
+		if (expr!=null) {
+			e.pmin = expr.pmin;
+			e.pmax = expr.pmax;
+			e.file = expr.file;
+		}
+		#end
+		return e;
 	}
 }
+
 enum ErrorDef {
-#else
-enum Error {
-#end
 	EInvalidChar( c : Int );
 	EUnexpected( s : String );
 	EUnterminatedString;
@@ -95,5 +108,7 @@ enum Error {
 	EUnknownVariable( v : String );
 	EInvalidIterator( v : String );
 	EInvalidOp( op : String );
+	EInvalidStmt( stmt : String );
 	EInvalidAccess( f : String );
+	EUnmatchedParameters( expect : Int, actual: Int );
 }

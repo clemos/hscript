@@ -115,7 +115,7 @@ class Macro {
 		case CTAnon(fields):
 			var tf = [];
 			for( f in fields )
-				tf.push( { name : f.name, meta : [], doc : null, access : [], kind : FVar(convertType(f.t),null), pos : p } );
+				tf.push( { name : f.name, isPublic : null, type : FVar(convertType(f.t)), pos : p } );
 			TAnonymous(tf);
 		};
 	}
@@ -174,8 +174,8 @@ class Macro {
 						opt : false,
 						value : null,
 					});
-				EFunction(name, {
-					params : [],
+				EFunction( {
+					name : name,
 					args : targs,
 					expr : convert(e),
 					ret : ret == null ? null : convertType(ret),
@@ -200,7 +200,7 @@ class Macro {
 				EObjectDecl(tf);
 			case ETernary(cond, e1, e2):
 				ETernary(convert(cond), convert(e1), convert(e2));
-		}, pos : #if hscriptPos { file : p.file, min : e.pmin, max : e.pmax } #else p #end }
+		}, pos : #if hscriptPos { file : e.file, min : e.pmin, max : e.pmax } #else p #end }
 	}
 
 }

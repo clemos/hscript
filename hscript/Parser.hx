@@ -46,6 +46,9 @@ enum Token {
 class Parser {
 
 	// config / variables
+	#if hscriptPos
+	public var file : String;
+	#end
 	public var line : Int;
 	public var opChars : String;
 	public var identChars : String;
@@ -114,19 +117,23 @@ class Parser {
 	}
 
 	public inline function error( err, pmin, pmax ) {
+		var e = new Error(err);
 		#if hscriptPos
-		throw new Error(err, pmin, pmax);
-		#else
-		throw err;
+		e.pmin = pmin;
+		e.pmax = pmax;
 		#end
+		throw e; 
 	}
 
 	public function invalidChar(c) {
 		error(EInvalidChar(c), readPos, readPos);
 	}
 
-	public function parseString( s : String ) {
-		line = 1;
+	public function parseString( s : String , ?f : String, ?lineOffset = 0) {
+		line = 1 + lineOffset;
+		#if hscriptPos
+		file = f;
+		#end
 		return parse( new haxe.io.StringInput(s) );
 	}
 
@@ -205,7 +212,7 @@ class Parser {
 		#if hscriptPos
 		if( pmin == null ) pmin = tokenMin;
 		if( pmax == null ) pmax = tokenMax;
-		return { e : e, pmin : pmin, pmax : pmax };
+		return { e : e, pmin : pmin, pmax : pmax, file : this.file };
 		#else
 		return e;
 		#end
@@ -534,6 +541,11 @@ class Parser {
 			ensure(TPClose);
 			var ec = parseExpr();
 			mk(ETry(e,vname,t,ec),p1,pmax(ec));
+#if hscriptPos
+		case "trace":
+			var e1 = parseExpr();
+			mk(ECall(mk(EIdent("_trace_")), [e1, mk(EConst(CString(file))), mk(EConst(CInt(line)))]));
+#end
 		default:
 			null;
 		}

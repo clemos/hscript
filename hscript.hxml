@@ -1,4 +1,8 @@
--swf9 hscript.swf
--swf-header 800:600:30:FFFFFF
---flash-strict
+# HScript
+-neko hscript.n
+-main Test
+-debug
+
+--next
+-xml doc.xml
 -main Test
