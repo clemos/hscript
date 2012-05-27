@@ -707,7 +707,7 @@ class Parser {
 	}
 
 	function readString( until ) {
-		var c = 0;
+		var c = null;
 		var b = new haxe.io.BytesOutput();
 		var esc = false;
 		var old = line;
@@ -733,7 +733,7 @@ class Parser {
 				case '/'.code: if( allowJSON ) b.writeByte(c) else invalidChar(c);
 				case "u".code:
 					if( !allowJSON ) throw invalidChar(c);
-					var code = "";
+					var code = null;
 					try {
 						incPos();
 						incPos();
