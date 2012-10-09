@@ -275,7 +275,11 @@ class Interp {
 				var fi = Reflect.field(obj,f);
 				if ( fi == null || !Reflect.isFunction(fi) ) throw Error.InExpr(ErrorDef.EInvalidAccess(f), e);
 				return call(obj,fi,args,e);
-			default:
+			case EIdent(f):
+				var fi = expr(e);
+				if( fi == null || !Reflect.isFunction(fi) ) throw Error.InExpr(ErrorDef.EInvalidAccess(f), e);
+				return call(null,expr(e),args,e);
+			default :
 				return call(null,expr(e),args,e);
 			}
 		case EIf(econd,e1,e2):
