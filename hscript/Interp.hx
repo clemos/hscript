@@ -224,7 +224,7 @@ class Interp {
 				return l.r;
 			var v = variables.get(id);
 			if( v == null && !variables.exists(id) )
-				throw Error.InExpr(ErrorDef.EUnknownVariable(id), e);
+				throw hscript.Error.InExpr(ErrorDef.EUnknownVariable(id), e);
 			return v;
 		case EVar(n,_,e):
 			declared.push({ n : n, old : locals.get(n) });
